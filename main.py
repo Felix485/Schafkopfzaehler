@@ -16,6 +16,12 @@ def init():
     if 'winners' not in st.session_state:
         st.session_state.winners = []
 
+# Function to update session state
+def update_session_state(key, value):
+    st.session_state[key] = value
+    # Store the updated session state in the browser storage
+    session_browser_storage.setItem(key, value)
+
 init()
 
 def determine_players_to_play(round_counter):
@@ -75,6 +81,24 @@ def determine_players_to_play(round_counter):
 
         return players_to_play
 
+def print_table():
+    # Berechne die Summe und füge sie als letzte Zeile hinzu
+    sum_row = st.session_state.scores.drop(columns='Spielart').sum().to_dict()
+    sum_row['Spielart'] = 'Summe'
+    sum_df = pd.DataFrame([sum_row])
+    combined_table = pd.concat([st.session_state.scores, sum_df], ignore_index=True)
+
+    # Zeige die kombinierte Tabelle an mit farblich hervorgehobener letzter Zeile
+    st.write(combined_table.style.apply(
+        lambda x: ['background-color: darkgray' if x.name == len(combined_table) - 1 else '' for _ in x], axis=1))
+
+    # Quersumme pruefen
+    total_balance = 0
+    for name in st.session_state.player_balances.keys():
+        total_balance += st.session_state.player_balances[name]
+    if total_balance != 0:
+        st.write("Es geht sich nicht mehr aus: ", total_balance)
+
 def register_players():
     st.title("Spielerregistrierung")
     num_players = st.number_input("Anzahl der Spieler (4-7)", min_value=4, max_value=7, value=4, step=1)
@@ -96,34 +120,56 @@ def remove_last_round():
             st.success("Letzte Runde erfolgreich gelöscht!")
 
             # Aktualisiere die Summe
-            st.write("Summe:", st.session_state.scores.drop(columns='Spielart').sum())
+            print_table()
+
+    #bugfixing
+    st.write(st.session_state.scores)
+    st.write(st.session_state.player_balances)
 
 def edit_last_round():
-
     if not st.session_state.scores.empty:
-        last_round = st.session_state.scores.iloc[-1]
+        last_round_index = st.session_state.scores.index[-1]  # Get the actual index of the last row
+        last_round = st.session_state.scores.loc[last_round_index]
         last_round_editable = last_round.copy()
         last_round_editable.name = "Bearbeitete Runde"
 
-        # Erstelle Eingabefelder für die Bearbeitung der letzten Runde
+        # Determine the number of columns needed (one for each score plus one for the button)
+        num_cols = sum(name != "Spielart" for name in last_round_editable.index)
+
+        # Create columns for the input fields
+        cols = st.columns(num_cols)
+
+        i = 0  # Initialize a counter for the columns
         for name, score in last_round_editable.items():
             if name != "Spielart":
-                last_round_editable[name] = st.number_input(f"{name} ({score})", value=score)
+                with cols[i]:
+                    last_round_editable[name] = st.number_input(f"{name} ({score})", value=score, key=name, step = 10)
+                i += 1  # Move to the next column
 
         if st.button("Runde bearbeiten und speichern"):
             # Aktualisiere die Spieler-Guthaben
             for name in last_round.index:
                 if name != "Spielart":
-                    st.session_state.player_balances[name] -= 10*last_round[name]
-                    st.session_state.player_balances[name] += 10*last_round_editable[name]
+                    st.session_state.player_balances[name] -= last_round[name]
+                    st.session_state.player_balances[name] += last_round_editable[name]
 
             # Aktualisiere die letzte Runde in der Tabelle
-            st.session_state.scores.iloc[-1] = last_round_editable
+            print_table()
 
             st.success("Letzte Runde erfolgreich bearbeitet und gespeichert!")
 
+        # Button zum Ändern der Punkte der letzten Runde
+        if st.button("Gewinner hat verloren"):
+            # Ändere das Vorzeichen der Punkte der letzten Runde
+            for name in last_round.index:
+                if name != "Spielart":
+                    st.session_state.scores.at[last_round_index, name] *= -1
+                    st.session_state.player_balances[name] -= 2 * last_round[name]
+
+            st.success("Punkte der letzten Runde erfolgreich geändert!")
+
             # Aktualisiere die Summe
-            st.write("Summe:", st.session_state.scores.drop(columns='Spielart').sum())
+            print_table()
 
 def record_rounds():
     st.title("Spielrunden Aufzeichnung")
@@ -173,7 +219,7 @@ def record_rounds():
                 round_scores[name] = tariff
         else:
             for name in st.session_state.winners:
-                round_scores[name] = tariff * (len(st.session_state.player_balances.keys()) - len(st.session_state.winners))
+                round_scores[name] = tariff * (4 - len(st.session_state.winners))
 
         # Füge die Spielart zur Runde hinzu
         round_scores['Spielart'] = st.session_state.game_type
@@ -184,18 +230,7 @@ def record_rounds():
 
         st.session_state.scores = pd.concat([st.session_state.scores, pd.DataFrame([round_scores])], ignore_index=True)
 
-
-        # Zeige die aktualisierte Tabelle an
-        st.write(st.session_state.scores)
-        st.write("Summe:", st.session_state.scores.drop(columns='Spielart').sum())
-
-        #Quersumme pruefen
-        total_balance = 0
-        for name in st.session_state.player_balances.keys():
-            total_balance += st.session_state.player_balances[name]
-        if total_balance != 0:
-            st.write("Es geht sich nicht mehr aus")
-            st.write(total_balance)
+        print_table()
 
         # Setze die Spielart und Gewinner zurück
         st.session_state.game_type = ''

@@ -1,0 +1,123 @@
+import streamlit as st
+import pandas as pd
+
+def print_table(df):
+    # Calculate the sum and append it as the last row
+    # Adjust column names based on your DataFrame's structure
+    sum_row = df.sum().to_dict()
+    #sum_row['Spielart'] = 'Summe'  # Replace 'Spielart' with the appropriate column name from your DataFrame
+    sum_df = pd.DataFrame([sum_row])
+    combined_table = pd.concat([df, sum_df], ignore_index=True)
+
+    # Display the combined table with the last row highlighted
+    st.write(combined_table.style.apply(
+        lambda x: ['background-color: darkgray' if x.name == len(combined_table) - 1 else '' for _ in x], axis=1))
+
+# Function to add a row to the DataFrame using concat
+def add_row_to_df(df, row):
+    new_df = pd.DataFrame([row])
+    return pd.concat([df, new_df], ignore_index=True)
+
+def calculate_auto_fill_values(num1, num2, num3, num4):
+    values = [num1, num2, num3, num4]
+    unfilled_fields = [v for v in values if v == 0]
+    filled_fields_sum = sum(values) - sum(unfilled_fields)
+
+    if unfilled_fields:
+        st.write("Autofilling fields")
+        fill_value = -filled_fields_sum // len(unfilled_fields)
+        return [fill_value if v == 0 else v for v in values]
+    else:
+        return values
+
+# Function to create the input form
+def create_input_form(col_names):
+    col1, col2 = st.columns(2)
+    with col1:
+        num1 = st.number_input(col_names[0], step=10, format='%d', key='num1')
+        num2 = st.number_input(col_names[1], step=10, format='%d', key='num2')
+    with col2:
+        num3 = st.number_input(col_names[2], step=10, format='%d', key='num3')
+        num4 = st.number_input(col_names[3], step=10, format='%d', key='num4')
+    return num1, num2, num3, num4
+
+
+def register_players():
+    st.title("Player Registration")
+    # Example: Allow user to enter names for 4 players
+    if 'player_names' not in st.session_state:
+        st.session_state['player_names'] = ['A', 'B', 'C', 'D']
+
+    for i in range(4):
+        st.session_state['player_names'][i] = st.text_input(f"Enter name for player {i+1}", value=st.session_state['player_names'][i])
+
+def main_game():
+    # Title for the app
+    st.title('Simple Schafkopf App')
+
+    # Retrieve or set default column names
+    col_names = st.session_state.get('player_names', ['Number 1', 'Number 2', 'Number 3', 'Number 4'])
+
+    # Function to create the input form with dynamic column names
+    def create_input_form(col_names):
+        col1, col2 = st.columns(2)
+        with col1:
+            num1 = st.number_input(col_names[0], step=10, format='%d', key='num1')
+            num2 = st.number_input(col_names[1], step=10, format='%d', key='num2')
+        with col2:
+            num3 = st.number_input(col_names[2], step=10, format='%d', key='num3')
+            num4 = st.number_input(col_names[3], step=10, format='%d', key='num4')
+        return num1, num2, num3, num4
+
+    # Creating the input form
+    num1, num2, num3, num4 = create_input_form(col_names)
+
+    # Initialize the DataFrame with dynamic column names
+    if 'data' not in st.session_state:
+        st.session_state['data'] = pd.DataFrame(columns=col_names)
+
+    column1, column2 = st.columns(2)
+
+    with column1:
+        if st.button('Submit'):
+            # First, auto-fill zero values to balance the fields
+            num1, num2, num3, num4 = calculate_auto_fill_values(num1, num2, num3, num4)
+
+            # Check if all numbers are divisible by 10
+            all_divisible_by_10 = all(n % 10 == 0 for n in [num1, num2, num3, num4])
+
+            # Then check if the sum is zero and all numbers are divisible by 10
+            if num1 + num2 + num3 + num4 == 0 and all_divisible_by_10:
+                # Create a new row with dynamic column names
+                new_row = {col_names[i]: value for i, value in enumerate([num1, num2, num3, num4])}
+                temp_df = add_row_to_df(st.session_state['data'], new_row)
+
+                # Update the session state DataFrame
+                st.session_state['data'] = temp_df
+
+            else:
+                st.error("The sum must be zero & numbers must be multiples of 10")
+    with column2:
+        if st.button('Remove Last Row'):
+            if not st.session_state['data'].empty:
+                # Drop the last row
+                st.session_state['data'] = st.session_state['data'].iloc[:-1]
+                st.success("Last row removed successfully.")
+
+            else:
+                st.warning("The DataFrame is already empty.")
+
+    # Display the DataFrame
+    print_table(st.session_state['data'])
+
+
+def main():
+    page = st.sidebar.radio("Select Page", ["Player Registration", "Main Game"])
+
+    if page == "Player Registration":
+        register_players()
+    elif page == "Main Game":
+        main_game()
+
+if __name__ == "__main__":
+    main()

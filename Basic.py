@@ -101,17 +101,25 @@ def create_input_form(col_names, active_player_names):
 
     for i, name in enumerate(col_names):
         with cols[i % num_columns]:
-            # Disable the input field if the player is not active and set its value to 0
+            # Disable the input field if the player is not active
             disabled = name not in active_player_names
+            # Initialize all input fields with a default value of 0
             value = 0 if disabled else st.session_state.get(f'num{i}', 0)
             inputs.append(st.number_input(name, step=10, format='%d', key=f'num{i}', disabled=disabled, value=value))
 
     return inputs
 
+
 def main_game():
     st.title('Simple Schafkopf App')
 
     col_names = st.session_state.get('player_names', [f'Number {i + 1}' for i in range(4)])
+
+    # Check if reset flag is set and reset input values if needed
+    if st.session_state.get('reset_inputs', False):
+        for i in range(len(col_names)):
+            st.session_state[f'num{i}'] = 0
+        st.session_state['reset_inputs'] = False
 
     # Determine active players for the current round
     round_counter = len(st.session_state['data'])  # Assuming each row in the DataFrame represents a round
@@ -151,8 +159,11 @@ def main_game():
             else:
                 st.warning("The DataFrame is already empty.")
     with column2:
-        # 'Next Round' button (currently does not perform any action)
-        st.button('Next Round')
+        if st.button('Reset Fields'):
+            # Set the reset flag
+            st.session_state['reset_inputs'] = True
+            # Rerun the script to reflect the reset state
+            st.experimental_rerun()
 
     # Display the DataFrame
     print_table(st.session_state['data'])

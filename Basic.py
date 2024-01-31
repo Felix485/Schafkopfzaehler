@@ -177,29 +177,32 @@ def create_input_form(col_names, active_player_names):
 def main_game():
     st.title('Simple Schafkopf App')
 
-    # Load DataFrame from URL at the start
-    if 'data' not in st.session_state:
-        st.session_state['data'] = read_and_decode_from_url() if read_and_decode_from_url().shape[0] > 0 else pd.DataFrame()
+    # Load player names and DataFrame from URL at the start
+    player_names, df = read_and_decode_from_url()
 
-    col_names = st.session_state.get('player_names', [f'Number {i + 1}' for i in range(4)])
+    if not player_names:
+        # Fallback if player names are not in URL
+        player_names = [f'Number {i + 1}' for i in range(4)]
+
+    if df.empty:
+        # Initialize an empty DataFrame with player names as columns if no data is present
+        df = pd.DataFrame(columns=player_names)
 
     # Check if reset flag is set and reset input values if needed
     if st.session_state.get('reset_inputs', False):
-        for i in range(len(col_names)):
+        for i in range(len(player_names)):
             st.session_state[f'num{i}'] = 0
         st.session_state['reset_inputs'] = False
 
-    # Determine active players for the current round
-    round_counter = len(st.session_state['data'])  # Assuming each row in the DataFrame represents a round
-    active_player_names = determine_players_to_play(round_counter)
+     # Determine active players for the current round
+    round_counter = len(df)
+    active_player_names = determine_players_to_play(round_counter, player_names)
 
     # Creating the input form with dynamic number of input fields
-    player_inputs = create_input_form(col_names, active_player_names)
-
-    if 'data' not in st.session_state:
-        st.session_state['data'] = pd.DataFrame(columns=col_names)
+    player_inputs = create_input_form(player_names, active_player_names)
 
     column1, column2, column3 = st.columns(3)
+
 
     with column1:
         if st.button('Submit'):
@@ -211,14 +214,11 @@ def main_game():
             all_divisible_by_10 = all(n % 10 == 0 for n in player_inputs)
             if sum(player_inputs) == 0 and all_divisible_by_10:
                 # Create a new row with dynamic column names
-                new_row = {col_names[i]: player_inputs[i] for i in range(len(col_names))}
-                temp_df = add_row_to_df(st.session_state['data'], new_row)
+                new_row = {player_names[i]: player_inputs[i] for i in range(len(player_names))}
+                df = add_row_to_df(df, new_row)
 
-                # Update the session state DataFrame
-                st.session_state['data'] = temp_df
-
-                 # Write updated DataFrame to URL
-                write_to_url(st.session_state['data'])
+                # Write updated DataFrame to URL
+                write_to_url(df)
             else:
                 st.error("The sum must be zero & numbers must be multiples of 10")
 
@@ -237,7 +237,7 @@ def main_game():
             st.experimental_rerun()
 
     # Display the DataFrame
-    print_table(st.session_state['data'])
+    print_table(df)
 
 def main():
     page = st.sidebar.radio("Select Page", ["Player Registration", "Main Game"])

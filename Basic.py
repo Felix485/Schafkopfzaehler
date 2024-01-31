@@ -1,9 +1,72 @@
 import streamlit as st
 import pandas as pd
+import base64
+from io import StringIO
 
-def print_table(df):
+def reshape(lst, shape):
+    # Reshape the list into a list of lists with the given shape
+    return [lst[i:i + shape[1]] for i in range(0, len(lst), shape[1])]
+
+def encode_dataframe(df):
+    # Convert DataFrame to CSV string
+    csv_str = df.to_csv(index=False)
+    # Encode the CSV string with base64
+    b64_encoded = base64.urlsafe_b64encode(csv_str.encode()).decode()
+    return b64_encoded
+
+
+
+def decode_to_dataframe(encoded_str):
+    padding = 4 - (len(encoded_str) % 4)
+    encoded_str += "=" * padding
+
+    try:
+        # Decode the base64 string
+        decoded_bytes = base64.urlsafe_b64decode(encoded_str)
+        #st.write("Decoded bytes:", decoded_bytes)  # DEBUG: Print the decoded bytes
+        
+        # Convert CSV string to DataFrame
+        csv_str = decoded_bytes.decode()
+        #st.write("CSV string:", csv_str)  # DEBUG: Print the CSV string before converting to DataFrame
+        
+        df = pd.read_csv(StringIO(csv_str))
+        return df
+    except Exception as e:
+        # Handle exceptions (like incorrect padding or other decoding issues)
+        print(f"Error decoding data: {e}")
+        return pd.DataFrame()
+
+
+
+def write_to_url(df):
+    # Store the encoded DataFrame in the URL
+    encoded_str = encode_dataframe(df)
+    #st.write("writing:",encoded_str) #DEBUG
+    st.query_params['data'] = encoded_str
+    # Rerun the app to reflect changes in the URL
+    # st.experimental_rerun()
+
+def read_and_decode_from_url():
+    # Retrieve the encoded DataFrame from the URL
+    query_params = st.query_params.to_dict()
+    encoded_str = query_params.get('data', [''])
+    if encoded_str:
+        # Decode the DataFrame
+        #st.write("reading raw:",encoded_str) # DEBUG
+        decoded_df = decode_to_dataframe(encoded_str)
+        #st.write(decoded_df)
+        return decoded_df
+    else:
+        # Return an empty DataFrame if there's no data in the URL
+        st.write("Error in read_and_decode_from_URL: else case")
+        return pd.DataFrame()
+
+
+def print_table(df):    
     # Calculate the sum and append it as the last row
     # Adjust column names based on your DataFrame's structure
+    decoded_string = read_and_decode_from_url()
+    #st.write("reading:",decoded_string) # DEBUG
     sum_row = df.sum().to_dict()
     #sum_row['Spielart'] = 'Summe'  # Replace 'Spielart' with the appropriate column name from your DataFrame
     sum_df = pd.DataFrame([sum_row])
@@ -110,8 +173,13 @@ def create_input_form(col_names, active_player_names):
     return inputs
 
 
+
 def main_game():
     st.title('Simple Schafkopf App')
+
+    # Load DataFrame from URL at the start
+    if 'data' not in st.session_state:
+        st.session_state['data'] = read_and_decode_from_url() if read_and_decode_from_url().shape[0] > 0 else pd.DataFrame()
 
     col_names = st.session_state.get('player_names', [f'Number {i + 1}' for i in range(4)])
 
@@ -148,6 +216,9 @@ def main_game():
 
                 # Update the session state DataFrame
                 st.session_state['data'] = temp_df
+
+                 # Write updated DataFrame to URL
+                write_to_url(st.session_state['data'])
             else:
                 st.error("The sum must be zero & numbers must be multiples of 10")
 
